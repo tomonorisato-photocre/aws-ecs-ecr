@@ -1,18 +1,19 @@
-machine:
-  services:
-    - docker
+version: 2.1
+orbs:
+  aws-cli: circleci/aws-cli@0.1.11
+  aws-ecr: circleci/aws-ecr@3.0.0
 
-dependencies:
-  post:
-    - docker build -t $AWS_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/nginx-sample-webapp:$CIRCLE_SHA1 .
+workflows:
+  build-and-deploy:
+    jobs:
+      - aws-ecr/build_and_push_image:
+          account-url: AWS_ECR_ACCOUNT_URL
+          repo: 'nginx'
+          tag: '${CIRCLE_SHA1}'
 
-test:
-  post:
-    - docker run -d -p 80:80 --name nginx-sample-webapp $AWS_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/nginx-sample-webapp:$CIRCLE_SHA1; sleep 10
-    - curl --retry 10 --retry-delay 5 localhost:80 | grep "Hello World!"
-
-deployment:
-  prod:
-    branch: master
-    commands:
-      - ./deploy.sh
+      - aws-ecs/deploy-service-update:
+                requires:
+                  - aws-ecr/build_and_push_image
+                family: 'nginx-sample-webapp'
+                cluster-name: 'nginx-sample-cluster'
+                container-image-name-updates: 'container=nginx,image-and-tag=${AWS_ECR_ACCOUNT_URL}/nginx:${CIRCLE_SHA1}'
